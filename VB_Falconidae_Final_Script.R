@@ -1,5 +1,5 @@
 # Falconidae C174 Final Project Script
-# Created by Vignesh Balasundaram (504495938)
+# Created by Vignesh Balasundaram
 # 03/20/2018
 
 # Set Working Directory
