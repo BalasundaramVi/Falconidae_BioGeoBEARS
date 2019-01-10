@@ -1,0 +1,280 @@
+# Check quality of BAMM results
+# Assess MCMC convergence
+# Supplemental Figure B3: MCMC Convergence
+mcmcout <- read.csv("Falconidae_mcmc_out.txt")
+Set Working Directory
+setwd("/Users/Vignesh B/Documents/RSTUDIO/FinalProject/C174FinalReport")
+# Import Libraries
+library(ape)
+library(ggtree)
+library(EBImage)
+library(BAMMtools)
+library(coda)
+library(phytools)
+library(geiger)
+library(optimx)
+library(FD)
+library(snow)
+library(parallel)
+library(BioGeoBEARS)
+# Test for convergence of the MCMC chains with the coda package for R
+burnstart <- floor(0.1 * nrow(mcmcout))
+# Check quality of BAMM results
+# Assess MCMC convergence
+# Supplemental Figure B3: MCMC Convergence
+mcmcout <- read.csv("Falconidae_mcmc_out.txt")
+plot(mcmcout$logLik ~ mcmcout$generation)
+# Test for convergence of the MCMC chains with the coda package for R
+burnstart <- floor(0.1 * nrow(mcmcout))
+postburn <- mcmcout[burnstart:nrow(mcmcout),]
+# Effective Size Post Burn of N_shifts and LogLik
+effectiveSize(postburn$N_shifts)
+effectiveSize(postburn$logLik)
+# Falconidae C174 Final Project Script
+# Created by Vignesh Balasundaram (504495938)
+# 03/20/2018
+# Set Working Directory
+setwd("/Users/Vignesh B/Documents/RSTUDIO/FinalProject/C174FinalReport")
+# Import Libraries
+library(ape)
+library(ggtree)
+library(EBImage)
+library(BAMMtools)
+library(coda)
+library(phytools)
+library(geiger)
+library(optimx)
+library(FD)
+library(snow)
+library(parallel)
+library(BioGeoBEARS)
+##################################################
+#####     PART I: CREATING THE PHYLOGENY     #####
+##################################################
+# Load Phylogeny of all Birds
+load("bird.phylo")
+zoom(bird.phylo, grep("Falconidae", bird.phylo$Family), cex = 0.5)
+# Find node of Falconidae from bird.phylo
+MRCA <- getMRCA(bird.phylo, tip = grep("Falconidae", bird.phylo$Family))
+MRCA # Node is 16322
+dev.off()
+# Extract and plot Falconidae clade
+Falconidae <- extract.clade(bird.phylo, node = 16322)
+plot(Falconidae, cex = 0.4)
+add.scale.bar()
+# Label Falconidae species found in South America
+CladeA <- getMRCA(Falconidae, tip = c("Phalcoboenus_australis", "Caracara_cheriway"))
+CladeA # to find appropriate node
+dev.off()
+# Supplemental Figure B1: Falcanidae Clade with Highlighted Caracaras
+PT <- ggtree(Falconidae)
+PT <- PT %>% phylopic("6cebf754-cb71-448d-a5bb-947157205264", color ="black", alpha = .2) +
+geom_hilight(112, fill = "indianred2", alpha = 0.4) +
+geom_cladelabel(node = 112, label = "Caracaras", align = T, angle = 270, hjust = 'center')
+print(PT)
+# Create a .tre File with only the necessary tree in question (Falconidae)
+write.tree(Falconidae, "FalconidaeTree.tre")
+# Test to see if .tre file has been made correctly
+# Supplemental Figure B2: Creation of Plot of Labeled South American Species
+test_tree <- read.tree("FalconidaeTree.tre")
+test_tree <- ladderize(test_tree)
+SL <- read.csv("SpeciesList.csv")
+test_tree$tip.label <- SL$ï..Number
+plot(test_tree, cex = 0.5, show.tip.label = TRUE, tip.col = c(rep("blue", 45), rep("red", 19)))
+title("Plot of South American Species to Species in Other Continents")
+legend(x = 0, y = 20, legend = c("South American", "Other"),
+fill = c(rep("red", 1), rep("blue", 2)), cex = 1)
+axisPhylo()
+dev.off()
+# Load Falconidae Tree
+tree <- read.tree("FalconidaeTree.tre")
+tree <- ladderize(tree)
+## Finding Nodes for Specific Subclades: ##
+# O_MRCA subclades of "Other" - Falconidae species inhabiting multiple regions
+# A_MRCA subclade of Falconidae species inhabiting Asia (with one outlier in Africa)
+# S1 + S2 MRCA of two South American subclades
+O_MRCA <- getMRCA(tree, tip = c("Falco_biarmicus", "Falco_alopex"))
+A_MRCA <- getMRCA(tree, tip = c("Microhierax_caerulescens", "Polihierax_semitorquatus"))
+S1_MRCA <- getMRCA(tree, tip = c("Micrastur_gilvicollis", "Herpetotheres_cachinnans"))
+S2_MRCA <- getMRCA(tree, tip = c("Phalcoboenus_australis", "Spiziapteryx_circumcincta"))
+# Creation of Heatmap of Falconidae Phylogeny to Geographic Area
+geodata <- read.delim("FalconGeo2.txt")
+Africa <- geodata$Africa
+Asia <- geodata$Asia
+Europe <- geodata$Europe
+SouthAmerica <- geodata$South.America
+NorthAmerica <- geodata$North.Central.America
+Australia <- geodata$Australia
+names(Africa) <- GeoTree$tip.label # naming each row with correct species
+g <- cbind(Africa, Asia, Europe, SouthAmerica, NorthAmerica, Australia)
+# Figure 1: Visual Representation of Geographic Ranges of Falconidae Species
+p <- ggtree(GeoTree) + geom_tiplab(size=3.5, align=TRUE, linesize=.5) + theme_tree2()
+pp <- (p + scale_y_continuous(expand=c(0, 0.3))) %>%
+gheatmap(g, offset=8, width=0.6, colnames=F, high = "steelblue", low = "lightgrey") %>%
+scale_x_ggtree()
+pp + theme(legend.position="right")
+##################################################
+#####          PART II: BAMM SCRIPT          #####
+##################################################
+# Import tree
+dev.off()
+tree <- read.tree("FalconidaeTree.tre")
+tree <- ladderize(tree)
+plot(tree, cex = 0.4)
+axisPhylo()
+# Preparing BAMM control file for Falconidae Tree
+# My Windows XPS 15 Pro has 4 cores
+is.ultrametric(tree)
+is.binary(tree)
+min(tree$edge.length)
+# estimate priors and create control files
+priors <- setBAMMpriors(tree, outfile = NULL)
+generateControlFile(file = "Falconidaecontrolfile.txt", params = list(
+treefile = "FalconidaeTree.tre",
+globalSamplingFraction = "1", # 100% sampling
+seed = sample(1:1000000, 1),
+overwrite = "0",
+expectedNumberOfShifts = "1",
+lambdaInitPrior = as.numeric(priors["lambdaInitPrior"]),
+lambdaShiftPrior = as.numeric(priors["lambdaShiftPrior"]),
+muInitPrior = as.numeric(priors["muInitPrior"]),
+numberOfGenerations = "50000000", # if you have fewer cores, make this 5 mil instead of 10 mil
+mcmcWriteFreq = "1000",
+eventDataWriteFreq = "1000",
+printFreq = "1000",
+acceptanceResetFreq = "1000",
+outName = "Falconidae",
+numberOfChains = "4")) # set to number of CPUs
+# Run all the BAMM commands on Command Prompt at this point
+#####    COMMAND PROMPT CODE     #####
+##
+## cd \Users\Vignesh B\Documents\RSTUDIO\FinalProject\C174FinalReport
+## bamm -c Falconidaecontrolfile.txt
+##
+##### END OF COMMAND PROMPT CODE #####
+# Import BAMM results into R
+edata <- getEventData(tree, eventdata = "Falconidae_event_data.txt", burnin = 0.1)
+# Falconidae C174 Final Project Script
+# Created by Vignesh Balasundaram (504495938)
+# 03/20/2018
+# Set Working Directory
+# setwd("/Users/Vignesh B/Documents/RSTUDIO/FinalProject/C174FinalReport")
+# Import Libraries
+library(ape)
+library(ggtree)
+library(EBImage)
+library(BAMMtools)
+library(coda)
+library(phytools)
+library(geiger)
+library(optimx)
+library(FD)
+library(snow)
+library(parallel)
+library(BioGeoBEARS)
+##################################################
+#####     PART I: CREATING THE PHYLOGENY     #####
+##################################################
+# Load Phylogeny of all Birds
+load("bird.phylo")
+zoom(bird.phylo, grep("Falconidae", bird.phylo$Family), cex = 0.5)
+# Find node of Falconidae from bird.phylo
+MRCA <- getMRCA(bird.phylo, tip = grep("Falconidae", bird.phylo$Family))
+MRCA # Node is 16322
+dev.off()
+# Extract and plot Falconidae clade
+Falconidae <- extract.clade(bird.phylo, node = 16322)
+plot(Falconidae, cex = 0.4)
+add.scale.bar()
+# Label Falconidae species found in South America
+CladeA <- getMRCA(Falconidae, tip = c("Phalcoboenus_australis", "Caracara_cheriway"))
+CladeA # to find appropriate node
+dev.off()
+# Supplemental Figure B1: Falcanidae Clade with Highlighted Caracaras
+PT <- ggtree(Falconidae)
+PT <- PT %>% phylopic("6cebf754-cb71-448d-a5bb-947157205264", color ="black", alpha = .2) +
+geom_hilight(112, fill = "indianred2", alpha = 0.4) +
+geom_cladelabel(node = 112, label = "Caracaras", align = T, angle = 270, hjust = 'center')
+print(PT)
+# Create a .tre File with only the necessary tree in question (Falconidae)
+write.tree(Falconidae, "FalconidaeTree.tre")
+# Test to see if .tre file has been made correctly
+# Supplemental Figure B2: Creation of Plot of Labeled South American Species
+test_tree <- read.tree("FalconidaeTree.tre")
+test_tree <- ladderize(test_tree)
+SL <- read.csv("SpeciesList.csv")
+test_tree$tip.label <- SL$ï..Number
+plot(test_tree, cex = 0.5, show.tip.label = TRUE, tip.col = c(rep("blue", 45), rep("red", 19)))
+title("Plot of South American Species to Species in Other Continents")
+legend(x = 0, y = 20, legend = c("South American", "Other"),
+fill = c(rep("red", 1), rep("blue", 2)), cex = 1)
+axisPhylo()
+dev.off()
+# Load Falconidae Tree
+tree <- read.tree("FalconidaeTree.tre")
+tree <- ladderize(tree)
+## Finding Nodes for Specific Subclades: ##
+# O_MRCA subclades of "Other" - Falconidae species inhabiting multiple regions
+# A_MRCA subclade of Falconidae species inhabiting Asia (with one outlier in Africa)
+# S1 + S2 MRCA of two South American subclades
+O_MRCA <- getMRCA(tree, tip = c("Falco_biarmicus", "Falco_alopex"))
+A_MRCA <- getMRCA(tree, tip = c("Microhierax_caerulescens", "Polihierax_semitorquatus"))
+S1_MRCA <- getMRCA(tree, tip = c("Micrastur_gilvicollis", "Herpetotheres_cachinnans"))
+S2_MRCA <- getMRCA(tree, tip = c("Phalcoboenus_australis", "Spiziapteryx_circumcincta"))
+# Creation of Heatmap of Falconidae Phylogeny to Geographic Area
+geodata <- read.delim("FalconGeo2.txt")
+Africa <- geodata$Africa
+Asia <- geodata$Asia
+Europe <- geodata$Europe
+SouthAmerica <- geodata$South.America
+NorthAmerica <- geodata$North.Central.America
+Australia <- geodata$Australia
+names(Africa) <- GeoTree$tip.label # naming each row with correct species
+g <- cbind(Africa, Asia, Europe, SouthAmerica, NorthAmerica, Australia)
+# Figure 1: Visual Representation of Geographic Ranges of Falconidae Species
+p <- ggtree(GeoTree) + geom_tiplab(size=3.5, align=TRUE, linesize=.5) + theme_tree2()
+pp <- (p + scale_y_continuous(expand=c(0, 0.3))) %>%
+gheatmap(g, offset=8, width=0.6, colnames=F, high = "steelblue", low = "lightgrey") %>%
+scale_x_ggtree()
+pp + theme(legend.position="right")
+##################################################
+#####          PART II: BAMM SCRIPT          #####
+##################################################
+# Import tree
+dev.off()
+tree <- read.tree("FalconidaeTree.tre")
+tree <- ladderize(tree)
+plot(tree, cex = 0.4)
+axisPhylo()
+# Preparing BAMM control file for Falconidae Tree
+# My Windows XPS 15 Pro has 4 cores
+is.ultrametric(tree)
+is.binary(tree)
+min(tree$edge.length)
+# estimate priors and create control files
+priors <- setBAMMpriors(tree, outfile = NULL)
+generateControlFile(file = "Falconidaecontrolfile.txt", params = list(
+treefile = "FalconidaeTree.tre",
+globalSamplingFraction = "1", # 100% sampling
+seed = sample(1:1000000, 1),
+overwrite = "0",
+expectedNumberOfShifts = "1",
+lambdaInitPrior = as.numeric(priors["lambdaInitPrior"]),
+lambdaShiftPrior = as.numeric(priors["lambdaShiftPrior"]),
+muInitPrior = as.numeric(priors["muInitPrior"]),
+numberOfGenerations = "50000000", # if you have fewer cores, make this 5 mil instead of 10 mil
+mcmcWriteFreq = "1000",
+eventDataWriteFreq = "1000",
+printFreq = "1000",
+acceptanceResetFreq = "1000",
+outName = "Falconidae",
+numberOfChains = "4")) # set to number of CPUs
+# Run all the BAMM commands on Command Prompt at this point
+#####    COMMAND PROMPT CODE     #####
+##
+## cd \Users\Vignesh B\Documents\RSTUDIO\FinalProject\C174FinalReport
+## bamm -c Falconidaecontrolfile.txt
+##
+##### END OF COMMAND PROMPT CODE #####
+# Import BAMM results into R
+edata <- getEventData(tree, eventdata = "Falconidae_event_data.txt", burnin = 0.1)
